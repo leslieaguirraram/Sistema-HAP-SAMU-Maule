@@ -512,3 +512,50 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Acciones del encabezado */
+.acciones-encabezado {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Botón de cierre de sesión */
+.boton-cerrar-sesion {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: #ffffff;
+  color: #123b63;
+  border: 1px solid #d8e7f6;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease,
+              color 0.2s ease,
+              transform 0.2s ease,
+              box-shadow 0.2s ease;
+}
+
+.boton-cerrar-sesion:hover {
+  background: #e4f5eb;
+  color: #216343;
+  border-color: #c2ebdc;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px #00000020;
+}
+
+.boton-cerrar-sesion:focus-visible {
+  outline: 3px solid #ffdf36;
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .acciones-encabezado {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

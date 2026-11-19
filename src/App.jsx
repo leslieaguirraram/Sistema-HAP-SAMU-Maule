@@ -3,7 +3,7 @@ import { useState } from 'react'
 import './App.css'
 import { db } from './firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth } from './firebase';
 
 function App() {
@@ -11,13 +11,17 @@ function App() {
   const [sesionIniciada, setSesionIniciada] = useState(false);
   const [correo, setCorreo] = useState('');
   const [clave, setClave] = useState('');
+  const [usuarioActual, setUsuarioActual] = useState(null);
 
  async function iniciarSesionPrueba(evento) {
   evento.preventDefault();
 
   try {
-    await signInWithEmailAndPassword(auth, correo, clave);
+    const credenciales = await signInWithEmailAndPassword(auth, correo, clave);
+
+    setUsuarioActual(credenciales.user);
     setSesionIniciada(true);
+
     alert('Sesión iniciada correctamente.');
   } catch (error) {
     console.error('Error al iniciar sesión:', error);
@@ -60,6 +64,23 @@ function App() {
     setHap((anterior) => ({ ...anterior, [campo]: valor }))
   }
 
+  async function cerrarSesion() {
+  try {
+    await signOut(auth);
+    setSesionIniciada(false);
+    setUsuarioActual(null);
+    setCorreo('');
+    setClave('');
+    setPantalla('inicio');
+    setPagina(1);
+
+    alert('Sesión cerrada correctamente.');
+  } catch (error) {
+    console.error('Error al cerrar sesión:', error);
+    alert('No se pudo cerrar la sesión.');
+  }
+}
+
   function actualizarQTR(indice, valor) {
     setHap((anterior) => {
       const nuevosQTR = [...anterior.qtr]
@@ -77,7 +98,7 @@ async function guardarBorrador(evento) {
       ...hap,
       estado_transcripcion: 'borrador',
       fecha_creacion: serverTimestamp(),
-      usuario_creacion: 'prototipo-academico',
+      usuario_creacion: usuarioActual.uid,
       usuario_confirmacion: null,
       fecha_confirmacion: null,
     });
@@ -412,7 +433,17 @@ if (!sesionIniciada) {
             <p>Sistema de Atención Médica de Urgencia</p>
           </div>
         </div>
-        <span className="estado">Prototipo académico</span>
+        <div className="acciones-encabezado">
+          <span className="estado">Prototipo académico</span>
+
+          <button
+            className="boton-cerrar-sesion"
+            onClick={cerrarSesion}
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      
       </header>
 
       <div className="estructura-panel">
