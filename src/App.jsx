@@ -1,8 +1,8 @@
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import './App.css'
 import { db } from './firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, writeBatch, serverTimestamp, getDocs, getDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth } from './firebase';
 
@@ -31,8 +31,15 @@ function App() {
 
   const [pantalla, setPantalla] = useState('inicio')
   const [pagina, setPagina] = useState(1)
+  const [guardando, setGuardando] = useState(false);
+  const [atenciones, setAtenciones] = useState([]);
+  const [busqueda, setBusqueda] = useState('');
+  const [detalleHAP, setDetalleHAP] = useState(null);
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [cargandoAtenciones, setCargandoAtenciones] = useState(false);
+  const bloqueoGuardado = useRef(false);
 
-    const [hap, setHap] = useState({
+    const [hap, setHap] = useState({  
     fechaAtencion: '',
     base: '',
     movil: '',
@@ -59,6 +66,38 @@ function App() {
     observaciones: '',
     qtr: Array(12).fill(''),
   })
+
+const limpiarFormulario = () => {
+  setHap({
+    fechaAtencion: '',
+    base: '',
+    movil: '',
+    complejidad: '',
+    clave: '',
+    prioridad: '',
+    comuna: '',
+    direccion: '',
+    paciente: '',
+    rut: '',
+    edad: '',
+    sexo: '',
+    motivo: '',
+    evaluacionPrimaria: '',
+    evaluacionSecundaria: '',
+    antecedentes: '',
+    medicamentosHabituales: '',
+    alergias: '',
+    signosVitales: '',
+    procedimientos: '',
+    medicamentos: '',
+    destino: '',
+    estadoTraslado: '',
+    observaciones: '',
+    qtr: Array(12).fill(''),
+  });
+
+  setPagina(1);
+};
 
   function actualizar(campo, valor) {
     setHap((anterior) => ({ ...anterior, [campo]: valor }))
@@ -90,23 +129,200 @@ function App() {
   }
 
   
+
 async function guardarBorrador(evento) {
   evento.preventDefault();
 
+  if (bloqueoGuardado.current) return;
+
+  bloqueoGuardado.current = true;
+  setGuardando(true);
+
   try {
-    const referencia = await addDoc(collection(db, 'ATENCIONES_HAP'), {
-      ...hap,
+
+    const lote = writeBatch(db);
+
+    // 1. Crear identificador de la atención
+    const atencionRef = doc(collection(db, 'ATENCIONES_HAP'));
+    const atencionId = atencionRef.id;
+
+    // 2. Crear referencias para los documentos relacionados
+    const pacienteRef = doc(collection(db, 'PACIENTES_HAP'));
+    const evaluacionRef = doc(collection(db, 'EVALUACIONES_CLINICAS'));
+    const procedimientoRef = doc(collection(db, 'PROCEDIMIENTOS_HAP'));
+    const trasladoRef = doc(collection(db, 'TRASLADOS_HAP'));
+    const qtrRef = doc(collection(db, 'TIEMPOS_QTR'));
+
+    // 3. Guardar los datos generales de la atención
+    lote.set(atencionRef, {
+      fechaAtencion: hap.fechaAtencion,
+      base: hap.base,
+      movil: hap.movil,
+      complejidad: hap.complejidad,
+      clave: hap.clave,
+      prioridad: hap.prioridad,
+      comuna: hap.comuna,
+      direccion: hap.direccion,
+      pacienteId: pacienteRef.id,
+      evaluacionId: evaluacionRef.id,
+      procedimientoId: procedimientoRef.id,
+      trasladoId: trasladoRef.id,
+      tiempoQtrId: qtrRef.id,
       estado_transcripcion: 'borrador',
       fecha_creacion: serverTimestamp(),
       usuario_creacion: usuarioActual.uid,
       usuario_confirmacion: null,
-      fecha_confirmacion: null,
+      fecha_confirmacion: null
     });
 
-    alert(`Borrador guardado correctamente. ID: ${referencia.id}`);
-  } catch (error) {
+    // 4. Guardar los datos del paciente
+    lote.set(pacienteRef, {
+      atencionId,
+      nombre: hap.paciente,
+      rut: hap.rut,
+      edad: hap.edad,
+      sexo: hap.sexo,
+      antecedentes: hap.antecedentes,
+      alergias: hap.alergias
+    });
+
+    // 5. Guardar la evaluación clínica
+    lote.set(evaluacionRef, {
+      atencionId,
+      motivo: hap.motivo,
+      evaluacionPrimaria: hap.evaluacionPrimaria,
+      evaluacionSecundaria: hap.evaluacionSecundaria,
+      signosVitales: hap.signosVitales,
+      medicamentosHabituales: hap.medicamentosHabituales
+    });
+
+    // 6. Guardar procedimientos y medicamentos
+    lote.set(procedimientoRef, {
+      atencionId,
+      procedimientos: hap.procedimientos,
+      medicamentos: hap.medicamentos
+    });
+
+    // 7. Guardar información del traslado
+    lote.set(trasladoRef, {
+      atencionId,
+      destino: hap.destino,
+      estadoTraslado: hap.estadoTraslado,
+      observaciones: hap.observaciones
+    });
+
+    // 8. Guardar los doce tiempos QTR
+    lote.set(qtrRef, {
+      atencionId,
+      qtr: hap.qtr
+    });
+
+    // 9. Guardar todos los documentos en una operación
+    await lote.commit();
+
+    alert(`HAP guardada correctamente. ID: ${atencionId}`);
+
+    limpiarFormulario();
+
+    } catch (error) {
     console.error('Error al guardar la HAP:', error);
-    alert('No se pudo guardar el borrador. Revisa las reglas de Firestore y la conexión.');
+    alert('No se pudo guardar la HAP. Revisa las reglas de Firestore y la conexión.');
+  } finally {
+    setGuardando(false);
+    bloqueoGuardado.current = false;
+  }
+}
+
+async function cargarAtenciones() {
+  setCargandoAtenciones(true);
+
+  try {
+    const [consulta, consultaPacientes] = await Promise.all([
+      getDocs(collection(db, 'ATENCIONES_HAP')),
+      getDocs(collection(db, 'PACIENTES_HAP'))
+    ]);
+
+    const pacientes = {};
+
+    consultaPacientes.docs.forEach((documento) => {
+      const paciente = documento.data();
+      pacientes[paciente.atencionId] = paciente;
+    });
+
+    const registros = consulta.docs.map((documento) => {
+      const atencion = documento.data();
+      const paciente = pacientes[documento.id];
+
+      return {
+        id: documento.id,
+        ...atencion,
+        rut: paciente?.rut || '',
+        nombrePaciente: paciente?.nombre || ''
+      };
+    });
+
+    setAtenciones(registros);
+
+  } catch (error) {
+    console.error('Error al consultar las HAP:', error);
+    alert('No se pudieron cargar las atenciones.');
+  } finally {
+    setCargandoAtenciones(false);
+  }
+}
+
+async function cargarDetalleHAP(atencion) {
+  setCargandoDetalle(true);
+  setDetalleHAP(null);
+
+  try {
+    const referencias = [
+      { campo: 'pacienteId', coleccion: 'PACIENTES_HAP' },
+      { campo: 'evaluacionId', coleccion: 'EVALUACIONES_CLINICAS' },
+      { campo: 'procedimientoId', coleccion: 'PROCEDIMIENTOS_HAP' },
+      { campo: 'trasladoId', coleccion: 'TRASLADOS_HAP' },
+      { campo: 'tiempoQtrId', coleccion: 'TIEMPOS_QTR' }
+    ];
+
+    const detalle = {};
+
+    for (const referencia of referencias) {
+
+  const identificador = atencion[referencia.campo];
+
+  if (!identificador) {
+    detalle[referencia.campo] = null;
+    continue;
+  }
+
+  const documentoRef = doc(
+    db,
+    referencia.coleccion,
+    identificador
+  );
+
+      const resultado = await getDoc(documentoRef);
+
+      detalle[referencia.campo] = resultado.exists()
+        ? resultado.data()
+        : null;
+    }
+
+    const detalleCompleto = {
+      ...atencion,
+      ...detalle
+    };
+
+    setDetalleHAP(detalleCompleto);
+    setPantalla('detalle');
+
+    console.log('Detalle completo de la HAP:', detalleCompleto);
+
+  } catch (error) {
+    console.error('Error al consultar el detalle de la HAP:', error);
+    alert('No se pudo recuperar el detalle de la HAP.');
+  } finally {
+    setCargandoDetalle(false);
   }
 }
 
@@ -150,7 +366,11 @@ if (!sesionIniciada) {
       <div className="aplicacion">
         <header className="encabezado">
           <div className="identidad">
-            <div className="simbolo">131</div>
+            <img
+            src="/insignia-samu.png"
+            alt="Insignia SAMU Región del Maule"
+            className="insignia-samu"
+          />
             <div>
               <h1>SAMU MAULE</h1>
               <p>Sistema de Registro Digital HAP</p>
@@ -173,7 +393,7 @@ if (!sesionIniciada) {
             <span className={pagina === 2 ? 'paso activo' : 'paso'}>2. Procedimientos y traslado</span>
           </div>
 
-          <form className="formulario-hap" onSubmit={guardarBorrador}>
+          <div className="formulario-hap">
             {pagina === 1 ? (
               <>
                 <h3>1. Identificación de la atención</h3>
@@ -406,10 +626,17 @@ if (!sesionIniciada) {
                   Continuar a página 2
                 </button>
               ) : (
-                <button type="submit">Probar formulario</button>
+                <button
+                  type="button"
+                  disabled={guardando}
+                  onClick={guardarBorrador}
+                >
+                  {guardando ? 'Guardando...' : 'Probar formulario'}
+                </button>
+
               )}
             </div>
-          </form>
+          </div>
 
             <div className="aviso">
             <strong>Prototipo académico:</strong> Los datos ficticios ingresados
@@ -422,12 +649,365 @@ if (!sesionIniciada) {
     )
   }
 
+      const atencionesFiltradas = atenciones.filter((atencion) => {
+        const termino = busqueda.toLowerCase().trim();
+
+        if (!termino) return true;
+
+        return [
+          atencion.rut,
+          atencion.fechaAtencion,
+          atencion.base,
+          atencion.movil,
+          atencion.nombrePaciente
+        ].some((valor) =>
+          String(valor ?? '').toLowerCase().includes(termino)
+        );
+      });
+
+  if (pantalla === 'registros') {
+  return (
+    <div className="aplicacion">
+      <header className="encabezado">
+        <div className="identidad">
+            <img
+              src="/insignia-samu.png"
+              alt="Insignia SAMU Región del Maule"
+              className="insignia-samu"
+            />
+
+            <div>
+              <h1>SAMU MAULE</h1>
+              <p>Consulta de Hojas de Atención Prehospitalaria</p>
+            </div>
+          </div>
+
+        <button
+          className="boton-volver"
+          onClick={() => setPantalla('inicio')}
+        >
+          Volver al inicio
+        </button>
+      </header>
+
+      <main className="contenido">
+        <h2>HAP registradas</h2>
+
+      <div className="buscador-hap">
+            <div className="buscador-campo">
+              <span className="icono-busqueda">⌕</span>
+
+              <input
+                type="text"
+                placeholder="Buscar por RUT, fecha, base, móvil o paciente..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+              />
+
+              {busqueda && (
+                <button
+                  type="button"
+                  className="boton-limpiar"
+                  onClick={() => setBusqueda('')}
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+
+            <p>Puede ingresar uno o varios datos para localizar una atención.</p>
+          </div>
+
+        {cargandoAtenciones ? (
+          <p>Cargando atenciones...</p>
+        ) : atencionesFiltradas.length === 0 ? (
+          <p>No existen atenciones registradas.</p>
+        ) : (
+          <div className="campos">
+            {atencionesFiltradas.map((atencion) => (
+              <article className="tarjeta" key={atencion.id}>
+                <h3>Atención {atencion.id}</h3>
+                <p>Fecha: {atencion.fechaAtencion || 'No registrada'}</p>
+                <p>Base: {atencion.base || 'No registrada'}</p>
+                <p>Móvil: {atencion.movil || 'No registrado'}</p>
+                <p>Estado: {atencion.estado_transcripcion || 'Sin estado'}</p>
+
+                <button
+                  type="button"
+                  onClick={() => cargarDetalleHAP(atencion)}
+                >
+                  Ver detalle
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </main>
+
+      <footer className="pie">SAMU Maule · Proyecto de Titulación · IPLACEX · 2026</footer>
+    </div>
+  );
+}
+
+if (pantalla === 'detalle') {
+  return (
+    <div className="aplicacion">
+      <header className="encabezado">
+        <div className="identidad">
+          <img
+            src="/insignia-samu.png"
+            alt="Insignia SAMU Región del Maule"
+            className="insignia-samu"
+          />
+          <div>
+            <h1>SAMU MAULE</h1>
+            <p>Detalle de Hoja de Atención Prehospitalaria</p>
+          </div>
+        </div>
+
+        <button
+          className="boton-volver"
+          onClick={() => setPantalla('registros')}
+        >
+          Volver a registros
+        </button>
+      </header>
+
+      <main className="contenido">
+        <h2>Detalle de la atención</h2>
+
+     {cargandoDetalle ? (
+      <p>Cargando detalle...</p>
+    ) : detalleHAP ? (
+<>
+  {/* 1. DATOS GENERALES */}
+<section className="tarjeta">
+  <h3>Identificación de la atención</h3>
+
+  <div className="datos-grid">
+    <div className="dato-item">
+      <strong>Fecha</strong>
+      <span>{detalleHAP.fechaAtencion || 'No registrada'}</span>
+    </div>
+
+    <div className="dato-item">
+      <strong>Base</strong>
+      <span>{detalleHAP.base || 'No registrada'}</span>
+    </div>
+
+    <div className="dato-item">
+      <strong>Móvil</strong>
+      <span>{detalleHAP.movil || 'No registrado'}</span>
+    </div>
+
+    <div className="dato-item">
+      <strong>Complejidad</strong>
+      <span>{detalleHAP.complejidad || 'No registrada'}</span>
+    </div>
+
+    <div className="dato-item">
+      <strong>Clave</strong>
+      <span>{detalleHAP.clave || 'No registrada'}</span>
+    </div>
+
+    <div className="dato-item">
+      <strong>Prioridad</strong>
+      <span>{detalleHAP.prioridad || 'No registrada'}</span>
+    </div>
+
+    <div className="dato-item">
+      <strong>Comuna</strong>
+      <span>{detalleHAP.comuna || 'No registrada'}</span>
+    </div>
+
+    <div className="dato-item">
+      <strong>Dirección</strong>
+      <span>{detalleHAP.direccion || 'No registrada'}</span>
+    </div>
+  </div>
+</section>
+
+ {/* 2. DATOS DEL PACIENTE */}
+<section className="tarjeta">
+  <h3>Identificación del paciente</h3>
+
+  {detalleHAP.pacienteId ? (
+    <div className="datos-grid">
+
+      <div className="dato-item">
+        <strong>Nombre</strong>
+        <span>{detalleHAP.pacienteId.nombre || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>RUT</strong>
+        <span>{detalleHAP.pacienteId.rut || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Edad</strong>
+        <span>{detalleHAP.pacienteId.edad || 'No registrada'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Sexo</strong>
+        <span>{detalleHAP.pacienteId.sexo || 'No registrado'}</span>
+      </div>
+
+    </div>
+  ) : (
+    <p>No hay datos del paciente asociados.</p>
+  )}
+</section>
+
+  {/* 3. EVALUACIÓN CLÍNICA */}
+<section className="tarjeta">
+  <h3>Descripción y evaluación clínica</h3>
+
+  {detalleHAP.evaluacionId ? (
+    <div className="datos-grid datos-grid-dos">
+
+      <div className="dato-item">
+        <strong>Motivo de atención</strong>
+        <span>{detalleHAP.evaluacionId.motivo || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Evaluación primaria</strong>
+        <span>{detalleHAP.evaluacionId.evaluacionPrimaria || 'No registrada'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Evaluación secundaria</strong>
+        <span>{detalleHAP.evaluacionId.evaluacionSecundaria || 'No registrada'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Signos vitales</strong>
+        <span>{detalleHAP.evaluacionId.signosVitales || 'No registrados'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Antecedentes</strong>
+        <span>{detalleHAP.pacienteId?.antecedentes || 'No registrados'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Medicamentos habituales</strong>
+        <span>{detalleHAP.evaluacionId.medicamentosHabituales || 'No registrados'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Alergias</strong>
+        <span>{detalleHAP.pacienteId?.alergias || 'No registradas'}</span>
+      </div>
+
+    </div>
+  ) : (
+    <p>No hay evaluación clínica asociada.</p>
+  )}
+</section>
+
+ {/* 4. PROCEDIMIENTOS Y MEDICAMENTOS */}
+<section className="tarjeta">
+  <h3>Procedimientos y medicamentos</h3>
+
+  {detalleHAP.procedimientoId ? (
+    <div className="datos-grid datos-grid-dos">
+
+      <div className="dato-item">
+        <strong>Procedimientos realizados</strong>
+        <span>
+          {detalleHAP.procedimientoId.procedimientos || 'No registrados'}
+        </span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Medicamentos administrados</strong>
+        <span>
+          {detalleHAP.procedimientoId.medicamentos || 'No registrados'}
+        </span>
+      </div>
+
+    </div>
+  ) : (
+    <p>No hay procedimientos asociados.</p>
+  )}
+</section>
+
+ {/* 5. TIEMPOS QTR */}
+<section className="tarjeta">
+  <h3>Registro de tiempos QTR</h3>
+
+  {detalleHAP.tiempoQtrId?.qtr ? (
+    <div className="qtr-detalle">
+      {detalleHAP.tiempoQtrId.qtr.map((tiempo, indice) => (
+        <div className="qtr-detalle-item" key={indice}>
+          <strong>QTR {indice + 1}</strong>
+          <span>{tiempo || 'Sin registro'}</span>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <p>No hay tiempos QTR asociados.</p>
+  )}
+</section>
+
+  {/* 6. TRASLADO */}
+<section className="tarjeta">
+  <h3>Información del traslado</h3>
+
+  {detalleHAP.trasladoId ? (
+    <div className="datos-grid datos-grid-tres">
+
+      <div className="dato-item">
+        <strong>Destino</strong>
+        <span>
+          {detalleHAP.trasladoId.destino || 'No registrado'}
+        </span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Estado del traslado</strong>
+        <span>
+          {detalleHAP.trasladoId.estadoTraslado || 'No registrado'}
+        </span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Observaciones</strong>
+        <span>
+          {detalleHAP.trasladoId.observaciones || 'Sin observaciones'}
+        </span>
+      </div>
+
+    </div>
+  ) : (
+    <p>No hay información del traslado asociada.</p>
+  )}
+</section>
+</>
+  ) : (
+   <p>No hay información disponible.</p>
+  )}
+      </main>
+
+      <footer className="pie">
+        SAMU Maule · Proyecto de Titulación · IPLACEX · 2026
+      </footer>
+    </div>
+  );
+}
  
   return (
     <div className="aplicacion">
       <header className="encabezado">
         <div className="identidad">
-          <div className="simbolo">131</div>
+          <img
+          src="/insignia-samu.png"
+          alt="Insignia SAMU Región del Maule"
+          className="insignia-samu"
+        />
           <div>
             <h1>SAMU Maule | Registro HAP</h1>
             <p>Sistema de Atención Médica de Urgencia</p>
@@ -454,7 +1034,13 @@ if (!sesionIniciada) {
           <button className="opcion-menu" onClick={() => { setPagina(1); setPantalla('formulario') }}>
             📋 Registrar HAP
           </button>
-          <button className="opcion-menu" onClick={() => alert('La búsqueda se implementará en una siguiente etapa.')}>
+          <button
+            className="opcion-menu"
+            onClick={() => {
+              setPantalla('registros');
+              cargarAtenciones();
+            }}
+          >
             🔎 Buscar registros
           </button>
           <button className="opcion-menu" onClick={() => alert('Los reportes se implementarán en una siguiente etapa.')}>
@@ -468,7 +1054,11 @@ if (!sesionIniciada) {
           </button>
 
           <div className="marca-lateral">
-            <div className="simbolo grande">131</div>
+            <img
+              src="/ambulancia_samu.png"
+              alt="Ambulancia SAMU"
+              className="ambulancia-lateral"
+            />
             <strong>SAMU Maule</strong>
             <span>Línea 131</span>
             <span>Reanimación</span>
@@ -520,7 +1110,13 @@ if (!sesionIniciada) {
               <span>→</span>
             </button>
 
-            <button className="atajo-secundario" onClick={() => alert('La búsqueda de registros se desarrollará más adelante.')}>
+            <button
+              className="atajo-secundario"
+              onClick={() => {
+                setPantalla('registros');
+                cargarAtenciones();
+              }}
+            >
               <span className="atajo-icono">🔎</span>
               <span>
                 <strong>Buscar registros</strong>
