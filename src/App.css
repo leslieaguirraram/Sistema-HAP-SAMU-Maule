@@ -213,6 +213,27 @@ body {
   margin-top: 0;
 }
 
+/* Personal que participa en la atención */
+.personal-hap-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 18px;
+}
+
+.personal-hap-grid label {
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.personal-hap-grid input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .campos {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -706,4 +727,79 @@ body {
   display: block;
   margin: 0 auto 10px;
   max-width: 100%;
+}
+
+/* Antecedentes mórbidos */
+.antecedentes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 20px;
+  margin-top: 12px;
+}
+
+.antecedentes-grid label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.antecedentes-grid input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* Evaluación secundaria HAP */
+.evaluacion-secundaria-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+  width: 100%;
+}
+
+.evaluacion-secundaria-grid label {
+  min-width: 0;
+}
+
+.evaluacion-secundaria-grid textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 65px;
+}
+
+@media (max-width: 700px) {
+  .evaluacion-secundaria-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Procedimientos realizados */
+.procedimientos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 20px;
+  margin-top: 12px;
+}
+
+.procedimientos-grid label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.procedimientos-grid input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+@media (max-width: 700px) {
+  .procedimientos-grid {
+    grid-template-columns: 1fr;
+  }
 }

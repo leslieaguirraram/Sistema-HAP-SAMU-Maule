@@ -5,6 +5,7 @@ import { db } from './firebase';
 import { collection, doc, writeBatch, serverTimestamp, getDocs, getDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth } from './firebase';
+import { generarHAP } from './utils/generarHAP';
 
 function App() {
   
@@ -13,21 +14,53 @@ function App() {
   const [clave, setClave] = useState('');
   const [usuarioActual, setUsuarioActual] = useState(null);
 
- async function iniciarSesionPrueba(evento) {
+ 
+async function iniciarSesionPrueba(evento) {
   evento.preventDefault();
 
   try {
-    const credenciales = await signInWithEmailAndPassword(auth, correo, clave);
+    const credenciales = await signInWithEmailAndPassword(
+      auth,
+      correo,
+      clave
+    );
 
-    setUsuarioActual(credenciales.user);
+    const usuario = credenciales.user;
+
+    // Buscar el perfil asociado al UID del usuario
+    const referenciaUsuario = doc(db, 'usuarios', usuario.uid);
+    const documentoUsuario = await getDoc(referenciaUsuario);
+
+    if (!documentoUsuario.exists()) {
+      await signOut(auth);
+      alert('El usuario no tiene un perfil asignado.');
+      return;
+    }
+
+    const datosUsuario = documentoUsuario.data();
+
+    if (datosUsuario.activo !== true) {
+      await signOut(auth);
+      alert('Esta cuenta se encuentra desactivada.');
+      return;
+    }
+
+    setUsuarioActual({
+      ...usuario,
+      perfil: datosUsuario.perfil,
+      nombre: datosUsuario.nombre
+    });
+
     setSesionIniciada(true);
 
-    alert('Sesión iniciada correctamente.');
+    alert(`Sesión iniciada correctamente. Perfil: ${datosUsuario.perfil}`);
+
   } catch (error) {
     console.error('Error al iniciar sesión:', error);
     alert('No se pudo iniciar sesión. Revisa tus credenciales.');
   }
 }
+
 
   const [pantalla, setPantalla] = useState('inicio')
   const [pagina, setPagina] = useState(1)
@@ -48,19 +81,74 @@ function App() {
     prioridad: '',
     comuna: '',
     direccion: '',
+    r: '',
+    t: '',
+    f: '',
+    mr: '',
+    pr: '',
+    ot: '',
     paciente: '',
     rut: '',
     edad: '',
     sexo: '',
-    motivo: '',
+    descripcionCR: '',
     evaluacionPrimaria: '',
-    evaluacionSecundaria: '',
-    antecedentes: '',
+    cincinnati: '',
+    conciencia: '',
+    ventilacion: '',
+    hemodinamia: '',
+    trazadoECG: '',
+    cabeza: '',
+    cuello: '',
+    viaAereaDificil: '',
+    torax: '',
+    dorso: '',
+    abdomen: '',
+    pelvis: '',
+    extremidadesSuperiores: '',
+    extremidadesInferiores: '',
+    genitales: '',
+    pielMucosas: '',
+    antecedentes: [],
+    antecedentesOtros: '',
     medicamentosHabituales: '',
     alergias: '',
-    signosVitales: '',
-    procedimientos: '',
-    medicamentos: '',
+    signosVitales: Array(3).fill({
+      hora: '',
+      glasgow: '',
+      fr: '',
+      fc: '',
+      pa: '',
+      pam: '',
+      llCapilar: '',
+      glicemia: '',
+      fio2: '',
+      sat: '',
+      co2: '',
+      temperatura: '',
+      eva: '',
+      triage: ''
+    }),
+    procedimientos: [],
+    medicamentos: Array(5).fill({
+      hora: '',
+      medicamento: '',
+      via: '',
+      dosis: '',
+      respuesta: ''
+    }),
+    traslado: '',
+    categorizacionCR: '',
+    entregadoUEH: '',
+    destinos: [],
+    apoyos: [],
+    claveReal: '',
+    profesionalReceptorUEH: '',
+    profesionalEntregaSAPU: '',
+    responsableRegistro: '',
+    estadoEscena: '',
+    estadoDuranteTraslado: '',
+    estadoUnidadEmergencia: '',
     destino: '',
     estadoTraslado: '',
     observaciones: '',
@@ -77,19 +165,74 @@ const limpiarFormulario = () => {
     prioridad: '',
     comuna: '',
     direccion: '',
+    r: '',
+    t: '',
+    f: '',
+    mr: '',
+    pr: '',
+    ot: '',
     paciente: '',
     rut: '',
     edad: '',
     sexo: '',
-    motivo: '',
+    descripcionCR: '',
     evaluacionPrimaria: '',
-    evaluacionSecundaria: '',
-    antecedentes: '',
+    cincinnati: '',
+    conciencia: '',
+    ventilacion: '',
+    hemodinamia: '',
+    trazadoECG: '',
+    cabeza: '',
+    cuello: '',
+    viaAereaDificil: '',
+    torax: '',
+    dorso: '',
+    abdomen: '',
+    pelvis: '',
+    extremidadesSuperiores: '',
+    extremidadesInferiores: '',
+    genitales: '',
+    pielMucosas: '',
+    antecedentes: [],
+    antecedentesOtros: '',
     medicamentosHabituales: '',
     alergias: '',
-    signosVitales: '',
-    procedimientos: '',
-    medicamentos: '',
+    signosVitales: Array(3).fill({
+      hora: '',
+      glasgow: '',
+      fr: '',
+      fc: '',
+      pa: '',
+      pam: '',
+      llCapilar: '',
+      glicemia: '',
+      fio2: '',
+      sat: '',
+      co2: '',
+      temperatura: '',
+      eva: '',
+      triage: ''
+    }),
+    procedimientos: [],
+    medicamentos: Array(5).fill({
+      hora: '',
+      medicamento: '',
+      via: '',
+      dosis: '',
+      respuesta: ''
+    }),
+    traslado: '',
+    categorizacionCR: '',
+    entregadoUEH: '',
+    destinos: [],
+    apoyos: [],
+    claveReal: '',
+    profesionalReceptorUEH: '',
+    profesionalEntregaSAPU: '',
+    responsableRegistro: '',
+    estadoEscena: '',
+    estadoDuranteTraslado: '',
+    estadoUnidadEmergencia: '',
     destino: '',
     estadoTraslado: '',
     observaciones: '',
@@ -163,6 +306,12 @@ async function guardarBorrador(evento) {
       prioridad: hap.prioridad,
       comuna: hap.comuna,
       direccion: hap.direccion,
+      r: hap.r,
+      t: hap.t,
+      f: hap.f,
+      mr: hap.mr,
+      pr: hap.pr,
+      ot: hap.ot,
       pacienteId: pacienteRef.id,
       evaluacionId: evaluacionRef.id,
       procedimientoId: procedimientoRef.id,
@@ -183,18 +332,38 @@ async function guardarBorrador(evento) {
       edad: hap.edad,
       sexo: hap.sexo,
       antecedentes: hap.antecedentes,
+      antecedentesOtros: hap.antecedentesOtros,
       alergias: hap.alergias
     });
 
+   
     // 5. Guardar la evaluación clínica
     lote.set(evaluacionRef, {
       atencionId,
-      motivo: hap.motivo,
+      descripcionCR: hap.descripcionCR,
       evaluacionPrimaria: hap.evaluacionPrimaria,
-      evaluacionSecundaria: hap.evaluacionSecundaria,
+
+      cincinnati: hap.cincinnati,
+      conciencia: hap.conciencia,
+      ventilacion: hap.ventilacion,
+      hemodinamia: hap.hemodinamia,
+      trazadoECG: hap.trazadoECG,
+      cabeza: hap.cabeza,
+      cuello: hap.cuello,
+      viaAereaDificil: hap.viaAereaDificil,
+      torax: hap.torax,
+      dorso: hap.dorso,
+      abdomen: hap.abdomen,
+      pelvis: hap.pelvis,
+      extremidadesSuperiores: hap.extremidadesSuperiores,
+      extremidadesInferiores: hap.extremidadesInferiores,
+      genitales: hap.genitales,
+      pielMucosas: hap.pielMucosas,
+
       signosVitales: hap.signosVitales,
       medicamentosHabituales: hap.medicamentosHabituales
     });
+
 
     // 6. Guardar procedimientos y medicamentos
     lote.set(procedimientoRef, {
@@ -203,13 +372,27 @@ async function guardarBorrador(evento) {
       medicamentos: hap.medicamentos
     });
 
-    // 7. Guardar información del traslado
+   
+// 7. Guardar información del traslado
     lote.set(trasladoRef, {
       atencionId,
+      traslado: hap.traslado,
+      categorizacionCR: hap.categorizacionCR,
+      entregadoUEH: hap.entregadoUEH,
+      destinos: hap.destinos,
+      apoyos: hap.apoyos,
       destino: hap.destino,
+      claveReal: hap.claveReal,
+      profesionalReceptorUEH: hap.profesionalReceptorUEH,
+      profesionalEntregaSAPU: hap.profesionalEntregaSAPU,
+      responsableRegistro: hap.responsableRegistro,
+      estadoEscena: hap.estadoEscena,
+      estadoDuranteTraslado: hap.estadoDuranteTraslado,
+      estadoUnidadEmergencia: hap.estadoUnidadEmergencia,
       estadoTraslado: hap.estadoTraslado,
       observaciones: hap.observaciones
     });
+
 
     // 8. Guardar los doce tiempos QTR
     lote.set(qtrRef, {
@@ -407,59 +590,400 @@ if (!sesionIniciada) {
                     />
                   </label>
 
-                  <label>
-                    Base SAMU
-                    <input
-                      value={hap.base}
-                      onChange={(e) => actualizar('base', e.target.value)}
-                      placeholder="Ej.: Talca"
-                    />
-                  </label>
+                 <label>
+                  Base SAMU
+                  <select
+                    value={hap.base}
+                    onChange={(e) => actualizar('base', e.target.value)}
+                  >
+                    <option value="">Seleccione una base</option>
+                    <option value="TALCA BASE 1">TALCA BASE 1</option>
+                    <option value="LINARES BASE 2">LINARES BASE 2</option>
+                    <option value="CURICÓ BASE 3">CURICÓ BASE 3</option>
+                    <option value="CAUQUENES BASE 4">CAUQUENES BASE 4</option>
+                    <option value="CONSTITUCIÓN BASE 5">CONSTITUCIÓN BASE 5</option>
+                    <option value="PARRAL BASE 6">PARRAL BASE 6</option>
+                    <option value="LICANTÉN BASE 7">LICANTÉN BASE 7</option>
+                    <option value="MOLINA BASE 8">MOLINA BASE 8</option>
+                    <option value="SAN JAVIER BASE 9">SAN JAVIER BASE 9</option>
+                    <option value="TENO BASE 10">TENO BASE 10</option>
+                    <option value="SAN CLEMENTE BASE 11">SAN CLEMENTE BASE 11</option>
+                    <option value="LONGAVÍ BASE 12">LONGAVÍ BASE 12</option>
+                    <option value="CHANCO BASE 13">CHANCO BASE 13</option>
+                  </select>
+                </label>
 
                   <label>
-                    Móvil
-                    <input
-                      value={hap.movil}
-                      onChange={(e) => actualizar('movil', e.target.value)}
-                      placeholder="Identificación del móvil"
-                    />
-                  </label>
+                  Móvil
+                  <select
+                    value={hap.movil}
+                    onChange={(e) => actualizar('movil', e.target.value)}
+                  >
+                    <option value="">Seleccione un móvil</option>
+                    <option value="7-638">7-638</option>
+                    <option value="7-639">7-639</option>
+                    <option value="7-623">7-623</option>
+                    <option value="7-627">7-627</option>
+                    <option value="7-628">7-628</option>
+                    <option value="7-614">7-614</option>
+                    <option value="7-624">7-624</option>
+                    <option value="7-625">7-625</option>
+                    <option value="7-616">7-616</option>
+                    <option value="7-626">7-626</option>
+                    <option value="7-610">7-610</option>
+                    <option value="7-615">7-615</option>
+                    <option value="7-587">7-587</option>
+                    <option value="7-612">7-612</option>
+                    <option value="7-595">7-595</option>
+                    <option value="7-592">7-592</option>
+                    <option value="7-591">7-591</option>
+                    <option value="7-611">7-611</option>
+                    <option value="7-593">7-593</option>
+                  </select>
+                </label>
 
                   <label>
-                    Complejidad
-                    <input
-                      value={hap.complejidad}
-                      onChange={(e) => actualizar('complejidad', e.target.value)}
-                      placeholder="Complejidad"
-                    />
-                  </label>
+                  Complejidad
+                  <select
+                    value={hap.complejidad}
+                    onChange={(e) => actualizar('complejidad', e.target.value)}
+                  >
+                    <option value="">Seleccione complejidad</option>
+                    <option value="M1">M1</option>
+                    <option value="M2">M2</option>
+                  </select>
+                </label>
 
                   <label>
-                    Clave
-                    <input
-                      value={hap.clave}
-                      onChange={(e) => actualizar('clave', e.target.value)}
-                      placeholder="Clave"
-                    />
-                  </label>
+                Clave
+                <select
+                  value={hap.clave}
+                  onChange={(e) => actualizar('clave', e.target.value)}
+                >
+                  <option value="">Seleccione clave</option>
+
+                  <option value="100">100</option>
+                  <option value="101">101</option>
+                  <option value="102">102</option>
+                  <option value="103">103</option>
+                  <option value="104">104</option>
+                  <option value="105">105</option>
+                  <option value="106">106</option>
+                  <option value="107">107</option>
+                  <option value="108">108</option>
+                  <option value="109">109</option>
+                  <option value="110">110</option>
+                  <option value="111">111</option>
+                  <option value="112">112</option>
+                  <option value="114">114</option>
+                  <option value="115">115</option>
+                  <option value="116">116</option>
+                  <option value="117">117</option>
+                  <option value="118">118</option>
+                  <option value="119">119</option>
+                  <option value="120">120</option>
+                  <option value="121">121</option>
+                  <option value="122">122</option>
+                  <option value="123">123</option>
+                  <option value="124">124</option>
+                  <option value="125">125</option>
+                  <option value="129">129</option>
+                  <option value="130">130</option>
+
+                  <option value="200">200</option>
+                  <option value="201">201</option>
+                  <option value="202">202</option>
+                  <option value="203">203</option>
+                  <option value="204">204</option>
+                  <option value="205">205</option>
+                  <option value="206">206</option>
+                  <option value="207">207</option>
+                  <option value="208">208</option>
+                  <option value="209">209</option>
+                  <option value="210">210</option>
+                  <option value="211">211</option>
+                  <option value="212">212</option>
+                  <option value="213">213</option>
+                  <option value="214">214</option>
+                  <option value="215">215</option>
+                  <option value="216">216</option>
+                  <option value="217">217</option>
+                  <option value="218">218</option>
+                  <option value="219">219</option>
+                  <option value="220">220</option>
+                  <option value="221">221</option>
+                  <option value="222">222</option>
+                  <option value="223">223</option>
+                  <option value="224">224</option>
+                  <option value="225">225</option>
+                  <option value="226">226</option>
+                  <option value="227">227</option>
+                  <option value="228">228</option>
+                  <option value="229">229</option>
+                  <option value="230">230</option>
+                  <option value="231">231</option>
+                  <option value="232">232</option>
+                  <option value="233">233</option>
+                  <option value="234">234</option>
+                  <option value="235">235</option>
+                  <option value="236">236</option>
+                  <option value="237">237</option>
+                  <option value="238">238</option>
+                  <option value="239">239</option>
+                  <option value="240">240</option>
+                  <option value="241">241</option>
+
+                  <option value="300">300</option>
+                  <option value="301">301</option>
+                  <option value="302">302</option>
+                  <option value="303">303</option>
+                  <option value="304">304</option>
+
+                  <option value="400">400</option>
+                  <option value="401">401</option>
+                  <option value="402">402</option>
+
+                  <option value="501">501</option>
+                  <option value="502">502</option>
+
+                  <option value="601">601</option>
+                  <option value="602">602</option>
+                  <option value="603">603</option>
+
+                  <option value="801">801</option>
+                  <option value="802">802</option>
+
+                  <option value="901">901</option>
+                  <option value="902">902</option>
+                </select>
+              </label>
+
+              
+              <label>
+                Clave real
+                <select
+                  value={hap.claveReal}
+                  onChange={(e) => actualizar('claveReal', e.target.value)}
+                >
+                  <option value="">Seleccione clave real</option>
+
+                  <option value="100">100</option>
+                  <option value="101">101</option>
+                  <option value="102">102</option>
+                  <option value="103">103</option>
+                  <option value="104">104</option>
+                  <option value="105">105</option>
+                  <option value="106">106</option>
+                  <option value="107">107</option>
+                  <option value="108">108</option>
+                  <option value="109">109</option>
+                  <option value="110">110</option>
+                  <option value="111">111</option>
+                  <option value="112">112</option>
+                  <option value="114">114</option>
+                  <option value="115">115</option>
+                  <option value="116">116</option>
+                  <option value="117">117</option>
+                  <option value="118">118</option>
+                  <option value="119">119</option>
+                  <option value="120">120</option>
+                  <option value="121">121</option>
+                  <option value="122">122</option>
+                  <option value="123">123</option>
+                  <option value="124">124</option>
+                  <option value="125">125</option>
+                  <option value="129">129</option>
+                  <option value="130">130</option>
+
+                  <option value="200">200</option>
+                  <option value="201">201</option>
+                  <option value="202">202</option>
+                  <option value="203">203</option>
+                  <option value="204">204</option>
+                  <option value="205">205</option>
+                  <option value="206">206</option>
+                  <option value="207">207</option>
+                  <option value="208">208</option>
+                  <option value="209">209</option>
+                  <option value="210">210</option>
+                  <option value="211">211</option>
+                  <option value="212">212</option>
+                  <option value="213">213</option>
+                  <option value="214">214</option>
+                  <option value="215">215</option>
+                  <option value="216">216</option>
+                  <option value="217">217</option>
+                  <option value="218">218</option>
+                  <option value="219">219</option>
+                  <option value="220">220</option>
+                  <option value="221">221</option>
+                  <option value="222">222</option>
+                  <option value="223">223</option>
+                  <option value="224">224</option>
+                  <option value="225">225</option>
+                  <option value="226">226</option>
+                  <option value="227">227</option>
+                  <option value="228">228</option>
+                  <option value="229">229</option>
+                  <option value="230">230</option>
+                  <option value="231">231</option>
+                  <option value="232">232</option>
+                  <option value="233">233</option>
+                  <option value="234">234</option>
+                  <option value="235">235</option>
+                  <option value="236">236</option>
+                  <option value="237">237</option>
+                  <option value="238">238</option>
+                  <option value="239">239</option>
+                  <option value="240">240</option>
+                  <option value="241">241</option>
+
+                  <option value="300">300</option>
+                  <option value="301">301</option>
+                  <option value="302">302</option>
+                  <option value="303">303</option>
+                  <option value="304">304</option>
+
+                  <option value="400">400</option>
+                  <option value="401">401</option>
+                  <option value="402">402</option>
+
+                  <option value="501">501</option>
+                  <option value="502">502</option>
+
+                  <option value="601">601</option>
+                  <option value="602">602</option>
+                  <option value="603">603</option>
+
+                  <option value="801">801</option>
+                  <option value="802">802</option>
+
+                  <option value="901">901</option>
+                  <option value="902">902</option>
+                </select>
+              </label>
+
+
 
                   <label>
                     Prioridad
-                    <input
+                    <select
                       value={hap.prioridad}
                       onChange={(e) => actualizar('prioridad', e.target.value)}
-                      placeholder="Prioridad"
+                    >
+                      <option value="">Seleccione</option>
+                      <option value="SI">SÍ</option>
+                      <option value="NO">NO</option>
+                    </select>
+                  </label>
+
+                  <label>
+                  Comuna
+                  <select
+                    value={hap.comuna}
+                    onChange={(e) => actualizar('comuna', e.target.value)}
+                  >
+                    <option value="">Seleccione una comuna</option>
+
+                    <optgroup label="Provincia de Talca">
+                      <option value="Talca">Talca</option>
+                      <option value="Constitución">Constitución</option>
+                      <option value="Curepto">Curepto</option>
+                      <option value="Empedrado">Empedrado</option>
+                      <option value="Maule">Maule</option>
+                      <option value="Pelarco">Pelarco</option>
+                      <option value="Pencahue">Pencahue</option>
+                      <option value="Río Claro">Río Claro</option>
+                      <option value="San Clemente">San Clemente</option>
+                      <option value="San Rafael">San Rafael</option>
+                    </optgroup>
+
+                    <optgroup label="Provincia de Curicó">
+                      <option value="Curicó">Curicó</option>
+                      <option value="Hualañé">Hualañé</option>
+                      <option value="Licantén">Licantén</option>
+                      <option value="Molina">Molina</option>
+                      <option value="Rauco">Rauco</option>
+                      <option value="Romeral">Romeral</option>
+                      <option value="Sagrada Familia">Sagrada Familia</option>
+                      <option value="Teno">Teno</option>
+                      <option value="Vichuquén">Vichuquén</option>
+                    </optgroup>
+
+                    <optgroup label="Provincia de Linares">
+                      <option value="Linares">Linares</option>
+                      <option value="Colbún">Colbún</option>
+                      <option value="Longaví">Longaví</option>
+                      <option value="Parral">Parral</option>
+                      <option value="Retiro">Retiro</option>
+                      <option value="San Javier">San Javier</option>
+                      <option value="Villa Alegre">Villa Alegre</option>
+                      <option value="Yerbas Buenas">Yerbas Buenas</option>
+                    </optgroup>
+
+                    <optgroup label="Provincia de Cauquenes">
+                      <option value="Cauquenes">Cauquenes</option>
+                      <option value="Chanco">Chanco</option>
+                      <option value="Pelluhue">Pelluhue</option>
+                    </optgroup>
+                  </select>
+                </label>
+
+                  <div className="personal-hap-grid">
+                  <label>
+                    R
+                    <input
+                      value={hap.r}
+                      onChange={(e) => actualizar('r', e.target.value)}
+                      placeholder="Código R"
                     />
                   </label>
 
                   <label>
-                    Comuna
+                    T
                     <input
-                      value={hap.comuna}
-                      onChange={(e) => actualizar('comuna', e.target.value)}
-                      placeholder="Comuna"
+                      value={hap.t}
+                      onChange={(e) => actualizar('t', e.target.value)}
+                      placeholder="Código T"
                     />
                   </label>
+
+                  <label>
+                    F 
+                    <input
+                      value={hap.f}
+                      onChange={(e) => actualizar('f', e.target.value)}
+                      placeholder="Código F"
+                    />
+                  </label>
+
+                  <label>
+                    MR
+                    <input
+                      value={hap.mr}
+                      onChange={(e) => actualizar('mr', e.target.value)}
+                      placeholder="Código MR"
+                    />
+                  </label>
+
+                  <label>
+                    PR
+                    <input
+                      value={hap.pr}
+                      onChange={(e) => actualizar('pr', e.target.value)}
+                      placeholder="Código PR"
+                    />
+                  </label>
+
+                  <label>
+                    OT
+                    <input
+                      value={hap.ot}
+                      onChange={(e) => actualizar('ot', e.target.value)}
+                      placeholder="Código OT"
+                    />
+                  </label>
+                  </div>
 
                   <label className="ancho-completo">
                     Dirección del evento
@@ -507,27 +1031,59 @@ if (!sesionIniciada) {
 
                   <h3>4. Evaluación clínica</h3>
                   <div className="campos">
-                    <label className="ancho-completo">
-                      Motivo de atención
-                      <textarea
-                        value={hap.motivo}
-                        onChange={(e) => actualizar('motivo', e.target.value)}
-                        rows="2"
-                      />
-                    </label>
+
+                  <label className="ancho-completo">
+                    Descripción del evento por CR
+                    <textarea
+                      value={hap.descripcionCR}
+                      onChange={(e) => actualizar('descripcionCR', e.target.value)}
+                      rows="2"
+                      placeholder="Descripción entregada por el Centro Regulador"
+                    />
+                  </label>
+
+                                        
+                  <div className="ancho-completo">
+                    <label>Antecedentes mórbidos</label>
+
+                    <div className="antecedentes-grid">
+                      {['HTA-AVE', 'DM', 'Epilepsia', 'Ginecológico', 'Asma',
+                        'Cardiológicos', 'Renal', 'Psiquiátricos', 'CA', 'Otros'].map((opcion) => (
+                        <label key={opcion}>
+                          <input
+                            type="checkbox"
+                            checked={hap.antecedentes.includes(opcion)}
+                            onChange={(e) => {
+                              const nuevosAntecedentes = e.target.checked
+                                ? [...hap.antecedentes, opcion]
+                                : hap.antecedentes.filter((item) => item !== opcion);
+
+                              actualizar('antecedentes', nuevosAntecedentes);
+                            }}
+                          />
+                          {opcion}
+                        </label>
+                      ))}
+                    </div>
+                  
+
+                  {hap.antecedentes.includes('Otros') && (
+                      <label className="ancho-completo">
+                        Especifique otros antecedentes
+                        <textarea
+                          value={hap.antecedentesOtros}
+                          onChange={(e) => actualizar('antecedentesOtros', e.target.value)}
+                          rows="2"
+                          placeholder="Describa los otros antecedentes"
+                        />
+                      </label>
+                    )}
+
+                    </div>                    
+
 
                     <label className="ancho-completo">
-                      Antecedentes mórbidos
-                      <textarea
-                        value={hap.antecedentes}
-                        onChange={(e) => actualizar('antecedentes', e.target.value)}
-                        rows="2"
-                        placeholder="Antecedentes del paciente (datos ficticios)"
-                      />
-                    </label>
-
-                    <label className="ancho-completo">
-                      Medicamentos habituales
+                      Medicamentos
                       <textarea
                         value={hap.medicamentosHabituales}
                         onChange={(e) => actualizar('medicamentosHabituales', e.target.value)}
@@ -555,25 +1111,117 @@ if (!sesionIniciada) {
                       />
                     </label>
 
-                    <label className="ancho-completo">
-                    Evaluación secundaria
-                    <textarea
-                      value={hap.evaluacionSecundaria}
-                      onChange={(e) => actualizar('evaluacionSecundaria', e.target.value)}
-                      rows="3"
-                      placeholder="Evaluación secundaria del paciente (datos ficticios)"
-                    />
-                  </label>
+                   
+                    <div className="ancho-completo">
+                      <label>Evaluación secundaria</label>
 
-                    <label className="ancho-completo">
-                      Signos vitales
-                      <textarea
-                        value={hap.signosVitales}
-                        onChange={(e) => actualizar('signosVitales', e.target.value)}
-                        rows="2"
-                        placeholder="Datos ficticios para pruebas"
-                      />
-                    </label>
+                      <div className="evaluacion-secundaria-grid">
+                        <label>Cincinnati
+                          <textarea value={hap.cincinnati} onChange={(e) => actualizar('cincinnati', e.target.value)} rows="2" />
+                        </label>
+                        <label>Tórax
+                          <textarea value={hap.torax} onChange={(e) => actualizar('torax', e.target.value)} rows="2" />
+                        </label>
+
+                        <label>Conciencia
+                          <textarea value={hap.conciencia} onChange={(e) => actualizar('conciencia', e.target.value)} rows="2" />
+                        </label>
+                        <label>Dorso
+                          <textarea value={hap.dorso} onChange={(e) => actualizar('dorso', e.target.value)} rows="2" />
+                        </label>
+
+                        <label>Ventilación
+                          <textarea value={hap.ventilacion} onChange={(e) => actualizar('ventilacion', e.target.value)} rows="2" />
+                        </label>
+                        <label>Abdomen
+                          <textarea value={hap.abdomen} onChange={(e) => actualizar('abdomen', e.target.value)} rows="2" />
+                        </label>
+
+                        <label>Hemodinamia
+                          <textarea value={hap.hemodinamia} onChange={(e) => actualizar('hemodinamia', e.target.value)} rows="2" />
+                        </label>
+                        <label>Pelvis
+                          <textarea value={hap.pelvis} onChange={(e) => actualizar('pelvis', e.target.value)} rows="2" />
+                        </label>
+
+                        <label>Trazado-ECG
+                          <textarea value={hap.trazadoECG} onChange={(e) => actualizar('trazadoECG', e.target.value)} rows="2" />
+                        </label>
+                        <label>Extremidades superiores
+                          <textarea value={hap.extremidadesSuperiores} onChange={(e) => actualizar('extremidadesSuperiores', e.target.value)} rows="2" />
+                        </label>
+
+                        <label>Cabeza
+                          <textarea value={hap.cabeza} onChange={(e) => actualizar('cabeza', e.target.value)} rows="2" />
+                        </label>
+                        <label>Extremidades inferiores
+                          <textarea value={hap.extremidadesInferiores} onChange={(e) => actualizar('extremidadesInferiores', e.target.value)} rows="2" />
+                        </label>
+
+                        <label>Cuello
+                          <textarea value={hap.cuello} onChange={(e) => actualizar('cuello', e.target.value)} rows="2" />
+                        </label>
+                        <label>Genitales
+                          <textarea value={hap.genitales} onChange={(e) => actualizar('genitales', e.target.value)} rows="2" />
+                        </label>
+
+                        <label>Vía aérea difícil
+                          <textarea value={hap.viaAereaDificil} onChange={(e) => actualizar('viaAereaDificil', e.target.value)} rows="2" />
+                        </label>
+                        <label>Piel y mucosas
+                          <textarea value={hap.pielMucosas} onChange={(e) => actualizar('pielMucosas', e.target.value)} rows="2" />
+                        </label>
+                      </div>
+                    </div>
+
+
+                    
+                    <div className="ancho-completo">
+                      <label>Signos vitales</label>
+
+                      <div className="tabla-signos-vitales">
+                        <table>
+                          <thead>
+                            <tr>
+                              {['Hora', 'Glasgow', 'FR', 'FC', 'P.A.', 'PAM',
+                                'LL capilar', 'Glicemia', 'FiO2', 'SAT', 'CO2',
+                                'Temperatura', 'EVA', 'Triage'].map((campo) => (
+                                <th key={campo}>{campo}</th>
+                              ))}
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            {hap.signosVitales.map((fila, indice) => (
+                              <tr key={indice}>
+                                {[
+                                  'hora', 'glasgow', 'fr', 'fc', 'pa', 'pam',
+                                  'llCapilar', 'glicemia', 'fio2', 'sat', 'co2',
+                                  'temperatura', 'eva', 'triage'
+                                ].map((campo) => (
+                                  <td key={campo}>
+                                    <input
+                                      type={campo === 'hora' ? 'time' : 'text'}
+                                      value={fila[campo]}
+                                      onChange={(e) => {
+                                        const nuevasFilas = hap.signosVitales.map((registro, i) =>
+                                          i === indice
+                                            ? { ...registro, [campo]: e.target.value }
+                                            : registro
+                                        );
+
+                                        actualizar('signosVitales', nuevasFilas);
+                                      }}
+                                    />
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
                   </div>
 
               </>
@@ -581,14 +1229,104 @@ if (!sesionIniciada) {
               <>
                 <h3>5. Procedimientos y medicamentos</h3>
                 <div className="campos">
-                  <label className="ancho-completo">
-                    Procedimientos realizados
-                    <textarea value={hap.procedimientos} onChange={(e) => actualizar('procedimientos', e.target.value)} rows="3" />
-                  </label>
-                  <label className="ancho-completo">
-                    Medicamentos registrados
-                    <textarea value={hap.medicamentos} onChange={(e) => actualizar('medicamentos', e.target.value)} rows="3" />
-                  </label>
+                  
+                <div className="ancho-completo">
+                  <label>Procedimientos realizados</label>
+
+                  <div className="procedimientos-grid">
+                    {[
+                      'CSV',
+                      'Aspiración orofaríngea',
+                      'Vía básica',
+                      'Vía avanzada',
+                      'SIR',
+                      'RCP básica-DEA',
+                      'RCP avanzada',
+                      'Compresor torácico automático',
+                      'Oxigenoterapia',
+                      'Monitorización ECG',
+                      'Desfibrilación',
+                      'Cardioversión eléctrica',
+                      'Cardioversión farmacológica',
+                      'Compresión torácica',
+                      'Marcapaso externo',
+                      'Nebulización',
+                      'Electrocardiograma',
+                      'Toracocentesis',
+                      'Vía venosa/Osteoclisis',
+                      'Compresión de hemorragias',
+                      'Empaquetamiento/CC',
+                      'Ferulación',
+                      'Glicemia capilar',
+                      'Atención de parto',
+                      'Atención de quemados',
+                      'Lavado gástrico',
+                      'Punción cricoidea',
+                      'Torniquete'
+                    ].map((opcion) => (
+                      <label key={opcion}>
+                        <input
+                          type="checkbox"
+                          checked={hap.procedimientos.includes(opcion)}
+                          onChange={(e) => {
+                            const nuevosProcedimientos = e.target.checked
+                              ? [...hap.procedimientos, opcion]
+                              : hap.procedimientos.filter((item) => item !== opcion);
+
+                            actualizar('procedimientos', nuevosProcedimientos);
+                          }}
+                        />
+                        {opcion}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+
+                  
+                <div className="ancho-completo">
+                  <label>Medicamentos y terapias administradas</label>
+
+                  <div className="tabla-medicamentos">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Hora</th>
+                          <th>Medicamento / Terapia eléctrica</th>
+                          <th>Vía</th>
+                          <th>Dosis</th>
+                          <th>Respuesta</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {hap.medicamentos.map((fila, indice) => (
+                          <tr key={indice}>
+                            {['hora', 'medicamento', 'via', 'dosis', 'respuesta'].map((campo) => (
+                              <td key={campo}>
+                                <input
+                                  type={campo === 'hora' ? 'time' : 'text'}
+                                  value={fila[campo]}
+                                  onChange={(e) => {
+                                    const nuevosMedicamentos = hap.medicamentos.map((registro, i) =>
+                                      i === indice
+                                        ? { ...registro, [campo]: e.target.value }
+                                        : registro
+                                    );
+
+                                    actualizar('medicamentos', nuevosMedicamentos);
+                                  }}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+
                  <label className="ancho-completo">
                   Estado del paciente durante el traslado
                   <textarea
@@ -600,17 +1338,168 @@ if (!sesionIniciada) {
                 </label> 
                 </div>
 
-                <h3>6. Traslado y observaciones</h3>
-                <div className="campos">
-                  <label className="ancho-completo">
-                    Destino o centro receptor
-                    <input value={hap.destino} onChange={(e) => actualizar('destino', e.target.value)} />
-                  </label>
-                  <label className="ancho-completo">
-                    Observaciones
-                    <textarea value={hap.observaciones} onChange={(e) => actualizar('observaciones', e.target.value)} rows="3" />
-                  </label>
-                </div>
+              
+                  <h3>6. Traslado y observaciones</h3>
+                  <div className="campos">
+
+                    <label>
+                      ¿Se realizó traslado?
+                      <select
+                        value={hap.traslado}
+                        onChange={(e) => actualizar('traslado', e.target.value)}
+                      >
+                        <option value="">Seleccione</option>
+                        <option value="SI">SÍ</option>
+                        <option value="NO">NO</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Categorización CR
+                      <select
+                        value={hap.categorizacionCR}
+                        onChange={(e) => actualizar('categorizacionCR', e.target.value)}
+                      >
+                        <option value="">Seleccione</option>
+                        <option value="C1">C1</option>
+                        <option value="C2">C2</option>
+                        <option value="C3">C3</option>
+                        <option value="C4">C4</option>
+                        <option value="C5">C5</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Paciente entregado en selector de demanda UEH
+                      <select
+                        value={hap.entregadoUEH}
+                        onChange={(e) => actualizar('entregadoUEH', e.target.value)}
+                      >
+                        <option value="">Seleccione</option>
+                        <option value="SI">SÍ</option>
+                        <option value="NO">NO</option>
+                      </select>
+                    </label>
+
+                    
+                    <label>
+                      Destino del traslado
+                      <select
+                        value={hap.destinos[0] || ''}
+                        onChange={(e) => actualizar('destinos', e.target.value ? [e.target.value] : [])}
+                      >
+                        <option value="">Seleccione destino</option>
+                        <option value="UEH">UEH</option>
+                        <option value="SAPU">SAPU</option>
+                        <option value="SUR">SUR</option>
+                        <option value="Clínica">Clínica</option>
+                      </select>
+                    </label>
+
+
+                    <div className="ancho-completo">
+                      <strong>Apoyos</strong>
+                      <div className="procedimientos-grid">
+                        {['Bomberos', 'Carabineros', 'Ambulancia'].map((apoyo) => (
+                          <label key={apoyo}>
+                            <input
+                              type="checkbox"
+                              checked={hap.apoyos.includes(apoyo)}
+                              onChange={(e) => {
+                                const nuevosApoyos = e.target.checked
+                                  ? [...hap.apoyos, apoyo]
+                                  : hap.apoyos.filter((a) => a !== apoyo);
+                                actualizar('apoyos', nuevosApoyos);
+                              }}
+                            />
+                            {apoyo}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <label className="ancho-completo">
+                      Profesional receptor UEH
+                      <input
+                        value={hap.profesionalReceptorUEH}
+                        onChange={(e) => actualizar('profesionalReceptorUEH', e.target.value)}
+                      />
+                    </label>
+
+                    <label className="ancho-completo">
+                      Profesional que entrega en SAPU
+                      <input
+                        value={hap.profesionalEntregaSAPU}
+                        onChange={(e) => actualizar('profesionalEntregaSAPU', e.target.value)}
+                      />
+                    </label>
+
+                    <label className="ancho-completo">
+                      Responsable del registro
+                      <input
+                        value={hap.responsableRegistro}
+                        onChange={(e) => actualizar('responsableRegistro', e.target.value)}
+                      />
+                    </label>
+
+                    <label>
+                      Estado del paciente en escena
+                      <select
+                        value={hap.estadoEscena}
+                        onChange={(e) => actualizar('estadoEscena', e.target.value)}
+                      >
+                        <option value="">Seleccione</option>
+                        <option value="E">E - Estable</option>
+                        <option value="I">I - Inestable</option>
+                        <option value="F">F - Fallecido</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Estado del paciente durante el traslado
+                      <select
+                        value={hap.estadoDuranteTraslado}
+                        onChange={(e) => actualizar('estadoDuranteTraslado', e.target.value)}
+                      >
+                        <option value="">Seleccione</option>
+                        <option value="E">E - Estable</option>
+                        <option value="I">I - Inestable</option>
+                        <option value="F">F - Fallecido</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Estado del paciente en unidad de emergencia
+                      <select
+                        value={hap.estadoUnidadEmergencia}
+                        onChange={(e) => actualizar('estadoUnidadEmergencia', e.target.value)}
+                      >
+                        <option value="">Seleccione</option>
+                        <option value="E">E - Estable</option>
+                        <option value="I">I - Inestable</option>
+                        <option value="F">F - Fallecido</option>
+                      </select>
+                    </label>
+
+                    <label className="ancho-completo">
+                      Destino o centro receptor
+                      <input
+                        value={hap.destino}
+                        onChange={(e) => actualizar('destino', e.target.value)}
+                      />
+                    </label>
+
+                    <label className="ancho-completo">
+                      Observaciones
+                      <textarea
+                        value={hap.observaciones}
+                        onChange={(e) => actualizar('observaciones', e.target.value)}
+                        rows="3"
+                      />
+                    </label>
+
+                  </div>
+
 
               </>
             )}
@@ -631,7 +1520,7 @@ if (!sesionIniciada) {
                   disabled={guardando}
                   onClick={guardarBorrador}
                 >
-                  {guardando ? 'Guardando...' : 'Probar formulario'}
+                  {guardando ? 'Guardando...' : 'GUARDAR HAP'}
                 </button>
 
               )}
@@ -776,6 +1665,15 @@ if (pantalla === 'detalle') {
       <main className="contenido">
         <h2>Detalle de la atención</h2>
 
+        {detalleHAP && (
+          <button
+            type="button"
+            onClick={() => generarHAP(detalleHAP)}
+          >
+            GENERAR PDF
+          </button>
+        )}
+
      {cargandoDetalle ? (
       <p>Cargando detalle...</p>
     ) : detalleHAP ? (
@@ -867,25 +1765,127 @@ if (pantalla === 'detalle') {
   {detalleHAP.evaluacionId ? (
     <div className="datos-grid datos-grid-dos">
 
-      <div className="dato-item">
-        <strong>Motivo de atención</strong>
-        <span>{detalleHAP.evaluacionId.motivo || 'No registrado'}</span>
-      </div>
-
+     
       <div className="dato-item">
         <strong>Evaluación primaria</strong>
         <span>{detalleHAP.evaluacionId.evaluacionPrimaria || 'No registrada'}</span>
       </div>
 
-      <div className="dato-item">
-        <strong>Evaluación secundaria</strong>
-        <span>{detalleHAP.evaluacionId.evaluacionSecundaria || 'No registrada'}</span>
-      </div>
+      
+            <div className="ancho-completo">
+              <strong>Evaluación secundaria</strong>
 
-      <div className="dato-item">
-        <strong>Signos vitales</strong>
-        <span>{detalleHAP.evaluacionId.signosVitales || 'No registrados'}</span>
-      </div>
+              <div className="evaluacion-secundaria-grid">
+                <div className="dato-item">
+                  <strong>Cincinnati</strong>
+                  <span>{detalleHAP.evaluacionId?.cincinnati || 'No registrada'}</span>
+                </div>
+                <div className="dato-item">
+                  <strong>Tórax</strong>
+                  <span>{detalleHAP.evaluacionId?.torax || 'No registrada'}</span>
+                </div>
+
+                <div className="dato-item">
+                  <strong>Conciencia</strong>
+                  <span>{detalleHAP.evaluacionId?.conciencia || 'No registrada'}</span>
+                </div>
+                <div className="dato-item">
+                  <strong>Dorso</strong>
+                  <span>{detalleHAP.evaluacionId?.dorso || 'No registrada'}</span>
+                </div>
+
+                <div className="dato-item">
+                  <strong>Ventilación</strong>
+                  <span>{detalleHAP.evaluacionId?.ventilacion || 'No registrada'}</span>
+                </div>
+                <div className="dato-item">
+                  <strong>Abdomen</strong>
+                  <span>{detalleHAP.evaluacionId?.abdomen || 'No registrada'}</span>
+                </div>
+
+                <div className="dato-item">
+                  <strong>Hemodinamia</strong>
+                  <span>{detalleHAP.evaluacionId?.hemodinamia || 'No registrada'}</span>
+                </div>
+                <div className="dato-item">
+                  <strong>Pelvis</strong>
+                  <span>{detalleHAP.evaluacionId?.pelvis || 'No registrada'}</span>
+                </div>
+
+                <div className="dato-item">
+                  <strong>Trazado-ECG</strong>
+                  <span>{detalleHAP.evaluacionId?.trazadoECG || 'No registrada'}</span>
+                </div>
+                <div className="dato-item">
+                  <strong>Extremidades superiores</strong>
+                  <span>{detalleHAP.evaluacionId?.extremidadesSuperiores || 'No registrada'}</span>
+                </div>
+
+                <div className="dato-item">
+                  <strong>Cabeza</strong>
+                  <span>{detalleHAP.evaluacionId?.cabeza || 'No registrada'}</span>
+                </div>
+                <div className="dato-item">
+                  <strong>Extremidades inferiores</strong>
+                  <span>{detalleHAP.evaluacionId?.extremidadesInferiores || 'No registrada'}</span>
+                </div>
+
+                <div className="dato-item">
+                  <strong>Cuello</strong>
+                  <span>{detalleHAP.evaluacionId?.cuello || 'No registrada'}</span>
+                </div>
+                <div className="dato-item">
+                  <strong>Genitales</strong>
+                  <span>{detalleHAP.evaluacionId?.genitales || 'No registrada'}</span>
+                </div>
+
+                <div className="dato-item">
+                  <strong>Vía aérea difícil</strong>
+                  <span>{detalleHAP.evaluacionId?.viaAereaDificil || 'No registrada'}</span>
+                </div>
+                <div className="dato-item">
+                  <strong>Piel y mucosas</strong>
+                  <span>{detalleHAP.evaluacionId?.pielMucosas || 'No registrada'}</span>
+                </div>
+              </div>
+            </div>
+
+
+      
+                <div className="ancho-completo">
+                  <strong>Signos vitales</strong>
+
+                  <div className="tabla-signos-vitales">
+                    <table>
+                      <thead>
+                        <tr>
+                          {['Hora', 'Glasgow', 'FR', 'FC', 'P.A.', 'PAM',
+                            'LL capilar', 'Glicemia', 'FiO2', 'SAT', 'CO2',
+                            'Temperatura', 'EVA', 'Triage'].map((campo) => (
+                            <th key={campo}>{campo}</th>
+                          ))}
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {(detalleHAP.evaluacionId?.signosVitales || []).map((fila, indice) => (
+                          <tr key={indice}>
+                            {[
+                              'hora', 'glasgow', 'fr', 'fc', 'pa', 'pam',
+                              'llCapilar', 'glicemia', 'fio2', 'sat', 'co2',
+                              'temperatura', 'eva', 'triage'
+                            ].map((campo) => (
+                              <td key={campo}>
+                                {fila[campo] || '—'}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
 
       <div className="dato-item">
         <strong>Antecedentes</strong>
@@ -915,19 +1915,52 @@ if (pantalla === 'detalle') {
   {detalleHAP.procedimientoId ? (
     <div className="datos-grid datos-grid-dos">
 
-      <div className="dato-item">
+            <div className="dato-item">
         <strong>Procedimientos realizados</strong>
-        <span>
-          {detalleHAP.procedimientoId.procedimientos || 'No registrados'}
-        </span>
+
+        {Array.isArray(detalleHAP.procedimientoId.procedimientos) &&
+        detalleHAP.procedimientoId.procedimientos.length > 0 ? (
+          <ul>
+            {detalleHAP.procedimientoId.procedimientos.map((procedimiento, indice) => (
+              <li key={indice}>{procedimiento}</li>
+            ))}
+          </ul>
+        ) : (
+          <span>No registrados</span>
+        )}
       </div>
 
-      <div className="dato-item">
-        <strong>Medicamentos administrados</strong>
-        <span>
-          {detalleHAP.procedimientoId.medicamentos || 'No registrados'}
-        </span>
-      </div>
+    
+        <div className="ancho-completo">
+          <strong>Medicamentos administrados</strong>
+
+          <div className="tabla-medicamentos">
+            <table>
+              <thead>
+                <tr>
+                  <th>Hora</th>
+                  <th>Medicamento / Terapia eléctrica</th>
+                  <th>Vía</th>
+                  <th>Dosis</th>
+                  <th>Respuesta</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {(detalleHAP.procedimientoId?.medicamentos || []).map((fila, indice) => (
+                  <tr key={indice}>
+                    {['hora', 'medicamento', 'via', 'dosis', 'respuesta'].map((campo) => (
+                      <td key={campo}>
+                        {fila[campo] || '—'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
 
     </div>
   ) : (
@@ -953,7 +1986,8 @@ if (pantalla === 'detalle') {
   )}
 </section>
 
-  {/* 6. TRASLADO */}
+ 
+{/* 6. TRASLADO */}
 <section className="tarjeta">
   <h3>Información del traslado</h3>
 
@@ -961,24 +1995,82 @@ if (pantalla === 'detalle') {
     <div className="datos-grid datos-grid-tres">
 
       <div className="dato-item">
-        <strong>Destino</strong>
+        <strong>¿Se realizó traslado?</strong>
+        <span>{detalleHAP.trasladoId.traslado || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Categorización CR</strong>
+        <span>{detalleHAP.trasladoId.categorizacionCR || 'No registrada'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Entregado en selector UEH</strong>
+        <span>{detalleHAP.trasladoId.entregadoUEH || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Destinos del traslado</strong>
         <span>
-          {detalleHAP.trasladoId.destino || 'No registrado'}
+          {detalleHAP.trasladoId.destinos?.join(', ') || 'No registrados'}
         </span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Apoyos</strong>
+        <span>
+          {detalleHAP.trasladoId.apoyos?.join(', ') || 'No registrados'}
+        </span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Destino o centro receptor</strong>
+        <span>{detalleHAP.trasladoId.destino || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Clave real</strong>
+        <span>{detalleHAP.trasladoId.claveReal || 'No registrada'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Profesional receptor UEH</strong>
+        <span>{detalleHAP.trasladoId.profesionalReceptorUEH || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Profesional que entrega en SAPU</strong>
+        <span>{detalleHAP.trasladoId.profesionalEntregaSAPU || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Responsable del registro</strong>
+        <span>{detalleHAP.trasladoId.responsableRegistro || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Estado del paciente en escena</strong>
+        <span>{detalleHAP.trasladoId.estadoEscena || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Estado durante el traslado</strong>
+        <span>{detalleHAP.trasladoId.estadoDuranteTraslado || 'No registrado'}</span>
+      </div>
+
+      <div className="dato-item">
+        <strong>Estado en unidad de emergencia</strong>
+        <span>{detalleHAP.trasladoId.estadoUnidadEmergencia || 'No registrado'}</span>
       </div>
 
       <div className="dato-item">
         <strong>Estado del traslado</strong>
-        <span>
-          {detalleHAP.trasladoId.estadoTraslado || 'No registrado'}
-        </span>
+        <span>{detalleHAP.trasladoId.estadoTraslado || 'No registrado'}</span>
       </div>
 
       <div className="dato-item">
         <strong>Observaciones</strong>
-        <span>
-          {detalleHAP.trasladoId.observaciones || 'Sin observaciones'}
-        </span>
+        <span>{detalleHAP.trasladoId.observaciones || 'Sin observaciones'}</span>
       </div>
 
     </div>
@@ -986,6 +2078,7 @@ if (pantalla === 'detalle') {
     <p>No hay información del traslado asociada.</p>
   )}
 </section>
+
 </>
   ) : (
    <p>No hay información disponible.</p>
@@ -1026,32 +2119,57 @@ if (pantalla === 'detalle') {
       
       </header>
 
-      <div className="estructura-panel">
-        <aside className="menu-lateral">
-          <button className="opcion-menu activa" onClick={() => setPantalla('inicio')}>
-            🏠 Inicio
-          </button>
-          <button className="opcion-menu" onClick={() => { setPagina(1); setPantalla('formulario') }}>
-            📋 Registrar HAP
-          </button>
-          <button
-            className="opcion-menu"
-            onClick={() => {
-              setPantalla('registros');
-              cargarAtenciones();
-            }}
-          >
-            🔎 Buscar registros
-          </button>
-          <button className="opcion-menu" onClick={() => alert('Los reportes se implementarán en una siguiente etapa.')}>
-            📊 Reportes
-          </button>
-          <button className="opcion-menu" onClick={() => alert('La administración de usuarios se implementará posteriormente.')}>
-            👥 Usuarios
-          </button>
-          <button className="opcion-menu" onClick={() => alert('Sistema académico en desarrollo. No ingresar datos reales.')}>
-            ❔ Ayuda
-          </button>
+      
+                <div className="estructura-panel">
+                  <aside className="menu-lateral">
+
+                    <button
+                      className="opcion-menu activa"
+                      onClick={() => setPantalla('inicio')}
+                    >
+                      🏠 Inicio
+                    </button>
+
+                    {usuarioActual?.perfil === 'DIGITADOR' && (
+                      <button
+                        className="opcion-menu"
+                        onClick={() => {
+                          setPagina(1);
+                          setPantalla('formulario');
+                        }}
+                      >
+                        📋 Registrar HAP
+                      </button>
+                    )}
+
+                    {usuarioActual?.perfil === 'SUPERVISOR' && (
+                      <>
+                        <button
+                          className="opcion-menu"
+                          onClick={() => {
+                            setPantalla('registros');
+                            cargarAtenciones();
+                          }}
+                        >
+                          🔎 Buscar registros
+                        </button>
+
+                        <button
+                          className="opcion-menu"
+                          onClick={() => alert('Los reportes se implementarán en una siguiente etapa.')}
+                        >
+                          📊 Reportes
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      className="opcion-menu"
+                      onClick={() => alert('Sistema académico en desarrollo. No ingresar datos reales.')}
+                    >
+                      ❔ Ayuda
+                    </button>
+
 
           <div className="marca-lateral">
             <img
@@ -1100,31 +2218,45 @@ if (pantalla === 'detalle') {
             </article>
           </section>
 
-          <section className="atajos-panel">
-            <button className="atajo-principal" onClick={() => { setPagina(1); setPantalla('formulario') }}>
-              <span className="atajo-icono">＋</span>
-              <span>
-                <strong>Nueva transcripción HAP</strong>
-                <small>Ingresar información desde una hoja de atención en papel.</small>
-              </span>
-              <span>→</span>
-            </button>
+          
+<section className="atajos-panel">
 
-            <button
-              className="atajo-secundario"
-              onClick={() => {
-                setPantalla('registros');
-                cargarAtenciones();
-              }}
-            >
-              <span className="atajo-icono">🔎</span>
-              <span>
-                <strong>Buscar registros</strong>
-                <small>La consulta se habilitará cuando conectemos la base de datos.</small>
-              </span>
-              <span>→</span>
-            </button>
-          </section>
+  {usuarioActual?.perfil === 'DIGITADOR' && (
+    <button
+      className="atajo-principal"
+      onClick={() => {
+        setPagina(1);
+        setPantalla('formulario');
+      }}
+    >
+      <span className="atajo-icono">＋</span>
+      <span>
+        <strong>Nueva transcripción HAP</strong>
+        <small>Ingresar información desde una hoja de atención en papel.</small>
+      </span>
+      <span>→</span>
+    </button>
+  )}
+
+    {usuarioActual?.perfil === 'SUPERVISOR' && (
+      <button
+        className="atajo-secundario"
+        onClick={() => {
+          setPantalla('registros');
+          cargarAtenciones();
+        }}
+      >
+        <span className="atajo-icono">🔎</span>
+        <span>
+          <strong>Buscar registros</strong>
+          <small>Consultar las transcripciones de atención HAP.</small>
+        </span>
+        <span>→</span>
+      </button>
+    )}
+
+  </section>
+
 
           <div className="pie-panel">
             <strong>Sistema de Atención Médica de Urgencia — SAMU Maule</strong>
