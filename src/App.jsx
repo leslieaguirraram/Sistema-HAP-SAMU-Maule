@@ -511,35 +511,104 @@ async function cargarDetalleHAP(atencion) {
 
 if (!sesionIniciada) {
   return (
-    <div className="contenido">
-      <h2>Acceso al sistema HAP</h2>
-      <p>Ingresa tus credenciales para continuar.</p>
+    <div className="login-samu">
+      <div className="login-panel">
 
-      <form onSubmit={iniciarSesionPrueba}>
-        <label>
-          Correo electrónico
-          <input
-            type="email"
-            value={correo}
-            onChange={(e) => setCorreo(e.target.value)}
-            required
-          />
-        </label>
+        <div className="login-identidad">
+          <div className="login-simbolo">131</div>
 
-        <label>
-          Contraseña
-          <input
-            type="password"
-            value={clave}
-            onChange={(e) => setClave(e.target.value)}
-            required
-          />
-        </label>
+          <div>
+            <span className="login-etiqueta">SAMU MAULE</span>
+            <h1>Atención Prehospitalaria</h1>
+            <p>Sistema de Registro Digital HAP</p>
+          </div>
+        </div>
 
-        <button type="submit">
-          Iniciar sesión
-        </button>
-      </form>
+        <div className="login-mensaje">
+          <span className="login-bienvenida">BIENVENIDA AL SISTEMA</span>
+
+          <h2>
+            Registro y respaldo digital
+            <br />
+            de la atención prehospitalaria
+          </h2>
+
+          <p>
+            Plataforma de apoyo para el registro,
+            consulta y respaldo de las Hojas de
+            Atención Prehospitalaria.
+          </p>
+        </div>
+
+        <div className="login-pie">
+          <span>🚑</span>
+          <p>SAMU Maule · Atención Prehospitalaria</p>
+        </div>
+
+      </div>
+
+      <div className="login-area">
+
+        <div className="login-tarjeta">
+
+          <div className="login-icono">🔐</div>
+
+          <span className="login-subtitulo">
+            ACCESO SEGURO
+          </span>
+
+          <h2>Iniciar sesión</h2>
+
+          <p className="login-descripcion">
+            Ingresa tus credenciales para continuar.
+          </p>
+
+          <form
+            className="login-formulario"
+            onSubmit={iniciarSesionPrueba}
+          >
+            <label>
+              Correo electrónico
+
+              <input
+                type="email"
+                value={correo}
+                onChange={(e) => setCorreo(e.target.value)}
+                placeholder="Ingresa tu correo electrónico"
+                required
+              />
+            </label>
+
+            <label>
+              Contraseña
+
+              <input
+                type="password"
+                value={clave}
+                onChange={(e) => setClave(e.target.value)}
+                placeholder="Ingresa tu contraseña"
+                required
+              />
+            </label>
+
+            <button type="submit">
+              Iniciar sesión
+              <span>→</span>
+            </button>
+          </form>
+
+          <div className="login-seguridad">
+            <span>🔒</span>
+            Acceso destinado a usuarios autorizados.
+          </div>
+
+        </div>
+
+        <div className="login-footer">
+          Sistema académico de registro digital HAP
+        </div>
+
+      </div>
     </div>
   );
 }
